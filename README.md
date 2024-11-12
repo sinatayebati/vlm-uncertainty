@@ -1,16 +1,3 @@
-# Uncertainty-Aware Evaluation for Vision-Language Models
-
-
-
-<p align="center">
-  <img src="images/logo.png" width="50%" />
-</p>
-
-
-
-## Introduction
-
-## Datasets
 
 
 ## Evaluation
@@ -128,23 +115,3 @@ python -m uncertainty_quantification_via_cp --result_data_path 'output' --file_t
 ```shell
 python -m make_tables --result_path 'full_result.json' --dir_to_write 'tables'
 ```
-
-## Citation
-
-```bibtex
-@article{kostumov2024uncertainty,
-  title={Uncertainty-Aware Evaluation for Vision-Language Models},
-  author={Kostumov, Vasily and Nutfullin, Bulat and Pilipenko, Oleg and Ilyushin, Eugene},
-  journal={arXiv preprint arXiv:2402.14418},
-  year={2024}
-}
-```
-
-## Acknowledgement
-
-[LLM-Uncertainty-Bench](https://github.com/smartyfh/LLM-Uncertainty-Bench): conformal prediction applied to LLM. Thanks for the authors for providing the framework.
-
-
-## Contact
-We welcome suggestions to help us improve benchmark. For any query, please contact us at v.kostumov@ensec.ai. If you find something interesting, please also feel free to share with us through email or open an issue. Thanks!
-
