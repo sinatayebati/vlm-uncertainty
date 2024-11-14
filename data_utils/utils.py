@@ -9,8 +9,8 @@ from .ai2d import download_ai2d, process_ai2d
 
 DATASETS = [
     'mmbench',
-    'oodcv',
     'scienceqa',
+    'oodcv',
     'seedbench',
     'ai2d'
 ]
