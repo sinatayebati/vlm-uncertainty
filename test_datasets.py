@@ -1,10 +1,10 @@
 from data_utils.utils import  get_dataset
 
 DATASETS = [
-    'oodcv',
     'mmbench',
-    #'mmmu',
     'scienceqa',
+    'oodcv',
+    # 'mmmu',
     'seedbench'
 ]
 
