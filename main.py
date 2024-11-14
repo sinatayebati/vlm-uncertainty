@@ -1,6 +1,8 @@
 import os
 import argparse
 import pickle
+import json
+import numpy as np
 
 from tqdm import tqdm
 
@@ -8,6 +10,13 @@ from models_utils import get_model, get_logits
 from data_utils import DATASETS, get_dataset
 from data_utils.common_utils import open_json, ALL_OPTIONS
 from input_utils import get_inputs
+
+# Custom JSON encoder for numpy arrays
+class NumpyArrayEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
 
 
 def main(args):
@@ -51,9 +60,21 @@ def main(args):
             out['logits'] = logits
             dataset_results.append(out)
 
-        out_file = os.path.join(output_dir, dataset_name + '.pkl')
-        with open(out_file, "wb") as f:
+        # out_file = os.path.join(output_dir, dataset_name + '.pkl')
+        # with open(out_file, "wb") as f:
+        #     pickle.dump(dataset_results, f)
+
+        # Save as pickle (original format)
+        out_file_pkl = os.path.join(output_dir, dataset_name + '.pkl')
+        with open(out_file_pkl, "wb") as f:
             pickle.dump(dataset_results, f)
+
+        # Save as JSON (new format)
+        out_file_json = os.path.join(output_dir, dataset_name + '.json')
+        with open(out_file_json, "w", encoding='utf-8') as f:
+            json.dump(dataset_results, f, cls=NumpyArrayEncoder, ensure_ascii=False, indent=2)
+
+        print(f'Results saved as:\n - {out_file_pkl}\n - {out_file_json}')
 
 
 if __name__ == "__main__":
