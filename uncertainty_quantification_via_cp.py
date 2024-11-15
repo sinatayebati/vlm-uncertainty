@@ -28,7 +28,8 @@ def get_accuracy(test_result_data):
     preds = []
     for row in test_result_data:
         truth_answer = row["answer"]
-        pred_answer = ALL_OPTIONS[np.argmax(row["logits"])]
+        logits = row["logits"][:6]
+        pred_answer = ALL_OPTIONS[np.argmax(logits)]
         preds.append(pred_answer)
         if pred_answer == truth_answer:
             res.append(1)
@@ -41,7 +42,7 @@ def get_ce(result_data, norm):
     target = torch.tensor([MAPPING[row['answer']] for row in result_data])
     pred = torch.tensor(
         np.array(
-            [softmax(row['logits']) for row in result_data]
+            [softmax(row['logits'][:6]) for row in result_data]
         )
     )
     metric = MulticlassCalibrationError(num_classes=6, n_bins=15, norm=norm)
@@ -64,7 +65,7 @@ def LAC_CP(cal_result_data, test_result_data, alpha=0.1):
     cal_scores = []
 
     for row in cal_result_data:
-        probs = softmax(row["logits"])
+        probs = softmax(row["logits"][:6])
         truth_answer = row["answer"]
         cal_scores.append(1 - probs[ALL_OPTIONS.index(truth_answer)])
     # calculate the threshold qhat
@@ -75,9 +76,9 @@ def LAC_CP(cal_result_data, test_result_data, alpha=0.1):
     # generate prediction sets
     pred_sets = {}
     for row in test_result_data:
-        probs = softmax(row["logits"])
+        probs = softmax(row["logits"][:6])
         ps = []
-        for ii, p in enumerate(probs):
+        for ii, p in enumerate(probs[:6]):
             # 1 - p <= qhat, so p >= 1- qhat
             if p >= 1 - qhat:
                 ps.append(ALL_OPTIONS[ii])
@@ -94,7 +95,7 @@ def APS_CP(cal_result_data, test_result_data, alpha=0.1):
     """
     cal_scores = []
     for row in cal_result_data:
-        probs = softmax(row["logits"])
+        probs = softmax(row["logits"][:6])
         truth_answer = row["answer"]
         cal_pi = np.argsort(probs)[::-1] # descending order
         cal_sum = np.take_along_axis(probs, cal_pi, axis=0).cumsum()
@@ -108,12 +109,12 @@ def APS_CP(cal_result_data, test_result_data, alpha=0.1):
     # generate prediction sets
     pred_sets = {}
     for row in test_result_data:
-        probs = softmax(row["logits"])
+        probs = softmax(row["logits"][:6])
         cal_pi = np.argsort(probs)[::-1] # descending order
         cal_sum = np.take_along_axis(probs, cal_pi, axis=0).cumsum()
         ps = []
         ii = 0
-        while ii < len(cal_sum) and cal_sum[ii] <= qhat:
+        while ii < min(len(cal_sum), 6) and cal_sum[ii] <= qhat:
             op_id = cal_pi[ii]
             ps.append(ALL_OPTIONS[op_id])
             ii += 1

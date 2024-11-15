@@ -1,9 +1,9 @@
 import json
 
 # Path to the original JSON file
-input_file = '/home/sina/projects/VLM-Uncertainty-Bench/datasets/seedbench/seedbench.json'
+input_file = '/home/sina/projects/VLM-Uncertainty-Bench/full_result.json'
 # Path to save the formatted JSON file
-output_file = '/home/sina/projects/VLM-Uncertainty-Bench/datasets/seedbench/formatted_file.json'
+output_file = '/home/sina/projects/VLM-Uncertainty-Bench/formatted_file.json'
 
 # Read and format the JSON
 with open(input_file, 'r') as file:
