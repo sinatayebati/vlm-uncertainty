@@ -60,10 +60,6 @@ def main(args):
             out['logits'] = logits
             dataset_results.append(out)
 
-        # out_file = os.path.join(output_dir, dataset_name + '.pkl')
-        # with open(out_file, "wb") as f:
-        #     pickle.dump(dataset_results, f)
-
         # Save as pickle (original format)
         out_file_pkl = os.path.join(output_dir, dataset_name + '.pkl')
         with open(out_file_pkl, "wb") as f:
