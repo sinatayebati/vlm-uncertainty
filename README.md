@@ -1,6 +1,6 @@
 
 
-## Evaluation
+<!-- ## Evaluation
 
 Accuracy Results 
 
@@ -49,7 +49,7 @@ Uncertainty-aware Accuracy Results
 | MobileVLM_V2-7B        | 84.19 |  64.35 | 79.07 | 62.18 | 39.39 | 65.84 |
 | MoE-LLaVA-Phi2-2.7B    | 82.83 | 100.73 | 61.18 | 64.67 | 47.87 | 71.46 |
 | mPLUG-Owl2             |  78.4 |  89.24 | 62.92 | 52.91 | 45.09 | 65.71 |
-| Qwen-VL-Chat           | 69.58 |  40.28 | 54.71 |  44.7 |  54.3 | 52.71 |
+| Qwen-VL-Chat           | 69.58 |  40.28 | 54.71 |  44.7 |  54.3 | 52.71 | -->
 
 ## Getting started
 
