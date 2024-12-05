@@ -144,60 +144,155 @@ def cal_set_size(pred_sets):
     return sum(sz) /len(sz)
 
 
-def Abstention_CP(cal_result_data, test_result_data, alpha=0.1, beta=0.05):
+def calculate_nonconformity_score(probs, pred_set, true_answer, all_options):
     """
-    Apply conformal prediction with an abstention option.
-    This method allows the model to:
-    - Provide a single prediction when highly confident.
-    - Provide a prediction set when somewhat uncertain.
-    - Abstain when highly uncertain.
-
-    Parameters:
-    - cal_result_data: Calibration data with logits and true answers.
-    - test_result_data: Test data with logits.
-    - alpha: Error rate for single predictions.
-    - beta: Additional error rate for abstentions.
-
+    Calculate nonconformity score based on prediction set and true answer.
+    
+    Args:
+        probs: Softmax probabilities for all classes
+        pred_set: List of predicted classes in the set
+        true_answer: The actual correct answer
+        all_options: List of all possible options
+    
     Returns:
-    - pred_outputs: A dictionary mapping example IDs to predictions.
-      The prediction can be a single class, a set of classes, or 'abstain'.
+        float: Nonconformity score between 0 and 1
     """
-    cal_scores = []
+    # Calculate sum of probabilities for classes in prediction set
+    pred_set_probs = sum(probs[all_options.index(cls)] for cls in pred_set)
+    
+    # Normalize by number of classes
+    norm_factor = len(all_options)
+    
+    if true_answer in pred_set:
+        # If true answer is in prediction set
+        # Score is lower (better) when pred_set is smaller and contains high probability classes
+        score = 1.0 - (pred_set_probs / norm_factor)
+    else:
+        # If true answer is not in prediction set
+        # Score is higher (worse) when pred_set has high probabilities but missed true answer
+        score = pred_set_probs / norm_factor
+        
+    return score
+
+def Abstention_CP(cal_result_data, test_result_data, alpha=0.1, beta=0.1, lambda1=0.5, lambda2=0.5):
+    """
+    Apply conformal prediction with abstention policy.
+    
+    Args:
+        cal_result_data: Calibration dataset
+        test_result_data: Test dataset
+        alpha: Error rate parameter for conformal prediction
+        beta: Abstention threshold parameter
+        lambda1: Weight for set size penalty
+        lambda2: Weight for abstention penalty
+    
+    Returns:
+        dict: Prediction sets with abstention decisions
+    """
+    # Calculate calibration scores using both LAC and new nonconformity measure
+    cal_scores_lac = []
+    cal_scores_nc = []
     
     for row in cal_result_data:
         probs = softmax(row["logits"][:6])
-        max_prob = np.max(probs)
-        cal_scores.append(1 - max_prob)
+        truth_answer = row["answer"]
+        
+        # Calculate LAC score
+        cal_scores_lac.append(1 - probs[ALL_OPTIONS.index(truth_answer)])
+        
+        # Get initial prediction set using LAC
+        pred_set = []
+        for ii, p in enumerate(probs):
+            if p >= 1 - cal_scores_lac[-1]:
+                pred_set.append(ALL_OPTIONS[ii])
+        
+        # Calculate new nonconformity score
+        nc_score = calculate_nonconformity_score(
+            probs, pred_set, truth_answer, ALL_OPTIONS
+        )
+        cal_scores_nc.append(nc_score)
     
     # Calculate thresholds
     n = len(cal_result_data)
-    q_level_predict = np.ceil((n+1) * (1-alpha)) / n
-    qhat_predict = np.quantile(cal_scores, q_level_predict, method='higher')
-
-    q_level_abstain = q_level_predict = np.ceil((n+1) * (1-beta)) / n
-    qhat_abstain = np.quantile(cal_scores, q_level_abstain, method='higher')
-
-    pred_outputs = {}
+    q_level = np.ceil((n+1) * (1-alpha)) / n
+    
+    qhat_lac = np.quantile(cal_scores_lac, q_level, method='higher')
+    qhat_nc = np.quantile(cal_scores_nc, q_level, method='higher')
+    
+    # Generate prediction sets with abstention
+    pred_sets = {}
+    abstention_decisions = {}
+    
     for row in test_result_data:
         probs = softmax(row["logits"][:6])
+        
+        # Initial prediction set using LAC
+        ps = []
+        for ii, p in enumerate(probs):
+            if p >= 1 - qhat_lac:
+                ps.append(ALL_OPTIONS[ii])
+        
+        if len(ps) == 0:
+            ps.append(ALL_OPTIONS[np.argmax(probs)])
+            
+        # Calculate cost function components
+        set_size_penalty = lambda1 * (len(ps) / len(ALL_OPTIONS))
         max_prob = np.max(probs)
-        score = 1 - max_prob
-        if score <= qhat_predict:
-            # High confidence: output single prediction
-            pred_outputs[str(row["id"])] = ALL_OPTIONS[np.argmax(probs)]
-        elif score <= qhat_abstain:
-            # Moderate confidence: output prediction set
-            sorted_indices = np.argsort(probs)[::-1]
-            cumulative_probs = np.cumsum(probs[sorted_indices])
-            # Decide the threshold for cumulative probability (e.g., 0.9)
-            cum_prob_threshold = 0.9
-            num_classes = np.searchsorted(cumulative_probs, cum_prob_threshold) + 1
-            pred_set = [ALL_OPTIONS[i] for i in sorted_indices[:num_classes]]
-            pred_outputs[str(row["id"])] = pred_set
+        confidence_score = 1 - calculate_nonconformity_score(
+            probs, ps, ALL_OPTIONS[np.argmax(probs)], ALL_OPTIONS
+        )
+        
+        # Decision rule for abstention
+        abstention_score = confidence_score - set_size_penalty
+        should_abstain = abstention_score < beta or len(ps) > len(ALL_OPTIONS) // 2
+        
+        if should_abstain:
+            abstention_decisions[str(row["id"])] = True
+            pred_sets[str(row["id"])] = []  # Empty set indicates abstention
         else:
-            # High uncertainty: abstain
-            pred_outputs[str(row["id"])] = 'abstain'
-    return pred_outputs
+            abstention_decisions[str(row["id"])] = False
+            pred_sets[str(row["id"])] = ps
+            
+    return pred_sets, abstention_decisions
+
+def calculate_abstention_metrics(pred_sets, abstention_decisions, test_id_to_answer, lambda1, lambda2):
+    """
+    Calculate metrics for abstention-based predictions.
+    
+    Returns:
+        dict: Dictionary containing various metrics
+    """
+    metrics = {}
+    
+    # Calculate abstention rate
+    abstention_rate = sum(abstention_decisions.values()) / len(abstention_decisions)
+    metrics['abstention_rate'] = abstention_rate
+    
+    # Calculate accuracy on non-abstained predictions
+    correct = 0
+    total_non_abstained = 0
+    
+    for id_str, pred_set in pred_sets.items():
+        if not abstention_decisions[id_str]:  # Only consider non-abstained predictions
+            total_non_abstained += 1
+            if test_id_to_answer[id_str] in pred_set:
+                correct += 1
+    
+    responded_accuracy = correct / total_non_abstained if total_non_abstained > 0 else 0
+    metrics['responded_accuracy'] = responded_accuracy
+    
+    # Calculate average set size for non-abstained predictions
+    set_sizes = [len(ps) for id_str, ps in pred_sets.items() 
+                if not abstention_decisions[id_str]]
+    avg_set_size = np.mean(set_sizes) if set_sizes else 0
+    metrics['avg_set_size'] = avg_set_size
+    
+    # Calculate combined performance metric
+    metrics['performance_score'] = responded_accuracy - \
+                                 lambda1 * (avg_set_size / len(ALL_OPTIONS)) - \
+                                 lambda2 * abstention_rate
+    
+    return metrics
 
 
 def calculate_metrics(result_data, args, model_results):
@@ -240,6 +335,23 @@ def calculate_metrics(result_data, args, model_results):
     ece = get_ce(result_data=result_data, norm='l1')
     mce = get_ce(result_data=result_data, norm='max')
 
+    pred_sets_abs, abstention_decisions = Abstention_CP(
+        cal_result_data, 
+        test_result_data,
+        alpha=args.alpha,
+        beta=args.beta,
+        lambda1=args.lambda1,
+        lambda2=args.lambda2
+    )
+    
+    abstention_metrics = calculate_abstention_metrics(
+        pred_sets_abs,
+        abstention_decisions,
+        test_id_to_answer,
+        args.lambda1,
+        args.lambda2
+    )
+
     model_results["ece"].append(ece)
     model_results["mce"].append(mce)
     # print('uacc_APS:', uacc_APS)
@@ -247,45 +359,7 @@ def calculate_metrics(result_data, args, model_results):
     model_results["set_sizes"].append(np.mean([set_sizes_LAC, set_sizes_APS]))
     model_results["coverage"].append(np.mean([coverage_all_LAC, coverage_all_APS]))
     model_results["uacc"].append(np.mean([uacc_LAC, uacc_APS]))
-
-
-    # Call the new Abstention_CP function
-    pred_outputs = Abstention_CP(cal_result_data, test_result_data, alpha=args.alpha, beta=args.beta)
-
-    # Initialize counters
-    correct_predictions = 0
-    total_predictions = 0
-    abstentions = 0
-    set_sizes = []
-
-    for idx, prediction in pred_outputs.items():
-        true_answer = test_id_to_answer[idx]
-        if prediction == 'abstain':
-            abstentions += 1
-            continue
-        elif isinstance(prediction, list):
-            set_sizes.append(len(prediction))
-            if true_answer in prediction:
-                correct_predictions += 1
-            total_predictions += 1
-        else:
-            if prediction == true_answer:
-                correct_predictions += 1
-            total_predictions += 1
-
-    # Compute metrics
-    if total_predictions > 0:
-        accuracy = correct_predictions / total_predictions
-    else:
-        accuracy = None  # No predictions made
-    abstention_rate = abstentions / len(test_result_data)
-    average_set_size = np.mean(set_sizes) if set_sizes else 0
-
-    # Store metrics
-    model_results['abstention_rate'].append(abstention_rate)
-    model_results['accuracy'].append(accuracy)
-    model_results['average_set_size'].append(average_set_size)
-    
+    model_results.update({f"abstention_{k}": [v] for k, v in abstention_metrics.items()})
     return model_results
 
 def calculate_metrics_for_model(model_name, args):
@@ -339,7 +413,7 @@ def main(args):
         else:
             raise ValueError(f"Unrecognized mode: {args.mode}")
     with open(args.file_to_write, 'w') as f:
-        json.dump(full_result, f, indent=4)
+        json.dump(full_result, f)
 
 
 if __name__ == "__main__":
@@ -350,9 +424,13 @@ if __name__ == "__main__":
     parser.add_argument("--cal_ratio", type=float, default=0.5,
                         help="The ratio of data to be used as the calibration data.")
     parser.add_argument("--alpha", type=float, default=0.1,
-                        help="The error rate parameter for predictions.")
-    parser.add_argument("--beta", type=float, default=0.05,
-                        help="The acceptable abstention rate.")
+                        help="The error rate parameter.")
+    parser.add_argument("--beta", type=float, default=0.2,
+                    help="Threshold for abstention decisions")
+    parser.add_argument("--lambda1", type=float, default=0.5,
+                        help="Weight for set size penalty")
+    parser.add_argument("--lambda2", type=float, default=0.5,
+                        help="Weight for abstention penalty")
     args = parser.parse_args()
 
     main(args)
