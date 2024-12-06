@@ -144,7 +144,7 @@ def cal_set_size(pred_sets):
     return sum(sz) /len(sz)
 
 
-def Abstention_CP(cal_result_data, test_result_data, alpha=0.1, beta=0.05):
+def Abstention_CP(cal_result_data, test_result_data, args):
     """
     Apply conformal prediction with an abstention option.
     This method allows the model to:
@@ -157,11 +157,11 @@ def Abstention_CP(cal_result_data, test_result_data, alpha=0.1, beta=0.05):
     - test_result_data: Test data with logits.
     - alpha: Error rate for single predictions.
     - beta: Additional error rate for abstentions.
-
-    Returns:
-    - pred_outputs: A dictionary mapping example IDs to predictions.
-      The prediction can be a single class, a set of classes, or 'abstain'.
     """
+    alpha = args.alpha
+    beta = args.beta
+    cum_prob_threshold = args.cum_prob_threshold
+
     cal_scores = []
     
     for row in cal_result_data:
@@ -189,8 +189,6 @@ def Abstention_CP(cal_result_data, test_result_data, alpha=0.1, beta=0.05):
             # Moderate confidence: output prediction set
             sorted_indices = np.argsort(probs)[::-1]
             cumulative_probs = np.cumsum(probs[sorted_indices])
-            # Decide the threshold for cumulative probability (e.g., 0.9)
-            cum_prob_threshold = 0.9
             num_classes = np.searchsorted(cumulative_probs, cum_prob_threshold) + 1
             pred_set = [ALL_OPTIONS[i] for i in sorted_indices[:num_classes]]
             pred_outputs[str(row["id"])] = pred_set
@@ -250,9 +248,8 @@ def calculate_metrics(result_data, args, model_results):
 
 
     # Call the new Abstention_CP function
-    pred_outputs = Abstention_CP(cal_result_data, test_result_data, alpha=args.alpha, beta=args.beta)
+    pred_outputs = Abstention_CP(cal_result_data, test_result_data, args)
 
-    # Initialize counters
     correct_predictions = 0
     total_predictions = 0
     abstentions = 0
@@ -353,6 +350,12 @@ if __name__ == "__main__":
                         help="The error rate parameter for predictions.")
     parser.add_argument("--beta", type=float, default=0.05,
                         help="The acceptable abstention rate.")
+    parser.add_argument("--cum_prob_threshold", type=float, default=0.9,
+                        help="Cumulative probability threshold for prediction sets.")
+    parser.add_argument("--lambda1", type=float, default=0.5,
+                        help="Weight for average set size in the cost function.")
+    parser.add_argument("--lambda2", type=float, default=0.5,
+                        help="Weight for abstention rate in the cost function.")
     args = parser.parse_args()
 
     main(args)
