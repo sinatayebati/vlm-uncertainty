@@ -126,6 +126,47 @@ def APS_CP(cal_result_data, test_result_data, alpha=0.1):
     return pred_sets
 
 
+def Abstention_CP(cal_result_data, test_result_data, args):
+    alpha = args.alpha
+    beta = args.beta
+    cum_prob_threshold = args.cum_prob_threshold
+
+    cal_scores = []
+    
+    for row in cal_result_data:
+        probs = softmax(row["logits"][:6])
+        max_prob = np.max(probs)
+        cal_scores.append(1 - max_prob)
+    
+    # Calculate thresholds
+    n = len(cal_result_data)
+    q_level_predict = np.ceil((n+1) * (1-alpha)) / n
+    qhat_predict = np.quantile(cal_scores, q_level_predict, method='higher')
+
+    q_level_abstain = np.ceil((n+1) * (1-beta)) / n
+    qhat_abstain = np.quantile(cal_scores, q_level_abstain, method='higher')
+
+    pred_outputs = {}
+    for row in test_result_data:
+        probs = softmax(row["logits"][:6])
+        max_prob = np.max(probs)
+        score = 1 - max_prob
+        if score <= qhat_predict:
+            # High confidence: output single prediction
+            pred_outputs[str(row["id"])] = ALL_OPTIONS[np.argmax(probs)]
+        elif score <= qhat_abstain:
+            # Moderate confidence: output prediction set
+            sorted_indices = np.argsort(probs)[::-1]
+            cumulative_probs = np.cumsum(probs[sorted_indices])
+            num_classes = np.searchsorted(cumulative_probs, cum_prob_threshold) + 1
+            pred_set = [ALL_OPTIONS[i] for i in sorted_indices[:num_classes]]
+            pred_outputs[str(row["id"])] = pred_set
+        else:
+            # High uncertainty: abstain
+            pred_outputs[str(row["id"])] = 'abstain'
+    return pred_outputs
+
+
 def cal_coverage(pred_sets, test_id_to_answer):
     """
     Calculate the coverage rate of prediction sets.
@@ -143,7 +184,7 @@ def cal_set_size(pred_sets):
     for k, v in pred_sets.items():
         sz.append(len(v))
     return sum(sz) /len(sz)
-    
+
 
 
 def calculate_metrics(result_data, args, model_results):
