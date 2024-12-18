@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
+import pathlib
 
 from data_utils.common_utils import ALL_OPTIONS
 from data_utils import DATASETS
@@ -41,6 +42,10 @@ def train_rl_policy(args):
     for model_name in models:
         print(f"Training policy for model: {model_name}")
         model_path = os.path.join(args.result_data_path, model_name)
+        
+        # Create model-specific directory for saving policies
+        model_save_path = pathlib.Path(args.save_model_path) / model_name
+        model_save_path.mkdir(parents=True, exist_ok=True)
 
         # Initialize hyperparameters
         hyperparams = torch.tensor([args.alpha, args.beta, args.cum_prob_threshold])
@@ -76,8 +81,8 @@ def train_rl_policy(args):
                 # Update hyperparameters
                 new_params = current_params + actions * args.adjustment_scale
                 # Ensure hyperparameters are within valid ranges
-                alpha = torch.clamp(new_params[0], 0.01, 0.5)
-                beta = torch.clamp(new_params[1], 0.01, 0.5)
+                alpha = torch.clamp(new_params[0], 0.001, 0.1)
+                beta = torch.clamp(new_params[1], 0.001, 0.2)
                 cum_prob_threshold = torch.clamp(new_params[2], 0.5, 1.0)
 
                 # Update args for metrics calculation
@@ -109,16 +114,29 @@ def train_rl_policy(args):
                 if epoch % 10 == 0:
                     print(f"Epoch {epoch}, Cost: {cost}, Hyperparameters: alpha={alpha.item()}, beta={beta.item()}, cum_prob_threshold={cum_prob_threshold.item()}")
 
-            # Save the trained policy network
-            save_path = os.path.join(args.save_model_path, f"{model_name}_{dataset_name}_policy.pth")
-            torch.save(policy_net.state_dict(), save_path)
+            # Save the trained policy network with organized structure
+            save_path = model_save_path / f"{model_name}_{dataset_name}_policy.pth"
+            torch.save({
+                'model_state_dict': policy_net.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'hyperparameters': {
+                    'alpha': alpha.item(),
+                    'beta': beta.item(),
+                    'cum_prob_threshold': cum_prob_threshold.item()
+                },
+                'final_metrics': {
+                    'accuracy': accuracy,
+                    'abstention_rate': abstention_rate,
+                    'average_set_size': average_set_size
+                }
+            }, save_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--result_data_path", type=str, required=True, help="Path to result data")
     parser.add_argument("--save_model_path", type=str, required=True, help="Path to save trained policies")
     parser.add_argument("--learning_rate", type=float, default=1e-3, help="Learning rate for optimizer")
-    parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
+    parser.add_argument("--epochs", type=int, default=500, help="Number of training epochs")
     parser.add_argument("--adjustment_scale", type=float, default=0.05, help="Scale for hyperparameter adjustments")
     parser.add_argument("--lambda1", type=float, default=0.5, help="Weight for average set size in the cost function.")
     parser.add_argument("--lambda2", type=float, default=0.5, help="Weight for abstention rate in the cost function.")
