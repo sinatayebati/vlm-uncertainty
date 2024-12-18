@@ -2,3 +2,9 @@ venv_base/
 datasets/
 __pycache__/
 trained_policies/
+tables/
+logs/
+*.pth
+*.pt
+*.pth.tar
+*.pt.tar

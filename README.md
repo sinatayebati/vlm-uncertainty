@@ -121,7 +121,7 @@ python abstention_training_rl.py \
     --result_data_path output \
     --save_model_path trained_policies \
     --learning_rate 1e-3 \
-    --epochs 100 \
+    --epochs 500 \
     --adjustment_scale 0.05 \
     --lambda1 0.5 \
     --lambda2 0.5 \
