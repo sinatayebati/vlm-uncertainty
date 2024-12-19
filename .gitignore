@@ -1,3 +1,12 @@
 venv_base/
 datasets/
 __pycache__/
+trained_policies/
+tables/
+evaluation_results/
+logs/
+output/
+*.pth
+*.pt
+*.pth.tar
+*.pt.tar

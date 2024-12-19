@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 import torch
+import torch.nn.functional as F
 from torchmetrics.classification import MulticlassCalibrationError
 
 from data_utils.common_utils import ALL_OPTIONS
@@ -125,6 +126,47 @@ def APS_CP(cal_result_data, test_result_data, alpha=0.1):
     return pred_sets
 
 
+def Abstention_CP(cal_result_data, test_result_data, args):
+    alpha = args.alpha
+    beta = args.beta
+    cum_prob_threshold = args.cum_prob_threshold
+
+    cal_scores = []
+    
+    for row in cal_result_data:
+        probs = softmax(row["logits"][:6])
+        max_prob = np.max(probs)
+        cal_scores.append(1 - max_prob)
+    
+    # Calculate thresholds
+    n = len(cal_result_data)
+    q_level_predict = np.ceil((n+1) * (1-alpha)) / n
+    qhat_predict = np.quantile(cal_scores, q_level_predict, method='higher')
+
+    q_level_abstain = np.ceil((n+1) * (1-beta)) / n
+    qhat_abstain = np.quantile(cal_scores, q_level_abstain, method='higher')
+
+    pred_outputs = {}
+    for row in test_result_data:
+        probs = softmax(row["logits"][:6])
+        max_prob = np.max(probs)
+        score = 1 - max_prob
+        if score <= qhat_predict:
+            # High confidence: output single prediction
+            pred_outputs[str(row["id"])] = ALL_OPTIONS[np.argmax(probs)]
+        elif score <= qhat_abstain:
+            # Moderate confidence: output prediction set
+            sorted_indices = np.argsort(probs)[::-1]
+            cumulative_probs = np.cumsum(probs[sorted_indices])
+            num_classes = np.searchsorted(cumulative_probs, cum_prob_threshold) + 1
+            pred_set = [ALL_OPTIONS[i] for i in sorted_indices[:num_classes]]
+            pred_outputs[str(row["id"])] = pred_set
+        else:
+            # High uncertainty: abstain
+            pred_outputs[str(row["id"])] = 'abstain'
+    return pred_outputs
+
+
 def cal_coverage(pred_sets, test_id_to_answer):
     """
     Calculate the coverage rate of prediction sets.
@@ -142,6 +184,7 @@ def cal_set_size(pred_sets):
     for k, v in pred_sets.items():
         sz.append(len(v))
     return sum(sz) /len(sz)
+
 
 
 def calculate_metrics(result_data, args, model_results):
@@ -191,6 +234,44 @@ def calculate_metrics(result_data, args, model_results):
     model_results["set_sizes"].append(np.mean([set_sizes_LAC, set_sizes_APS]))
     model_results["coverage"].append(np.mean([coverage_all_LAC, coverage_all_APS]))
     model_results["uacc"].append(np.mean([uacc_LAC, uacc_APS]))
+
+
+    # Call the new Abstention_CP function
+    pred_outputs = Abstention_CP(cal_result_data, test_result_data, args)
+
+    correct_predictions = 0
+    total_predictions = 0
+    abstentions = 0
+    set_sizes = []
+
+    for idx, prediction in pred_outputs.items():
+        true_answer = test_id_to_answer[idx]
+        if prediction == 'abstain':
+            abstentions += 1
+            continue
+        elif isinstance(prediction, list):
+            set_sizes.append(len(prediction))
+            if true_answer in prediction:
+                correct_predictions += 1
+            total_predictions += 1
+        else:
+            if prediction == true_answer:
+                correct_predictions += 1
+            total_predictions += 1
+
+    # Compute metrics
+    if total_predictions > 0:
+        accuracy = correct_predictions / total_predictions
+    else:
+        accuracy = None  # No predictions made
+    abstention_rate = abstentions / len(test_result_data)
+    average_set_size = np.mean(set_sizes) if set_sizes else 0
+
+    # Store metrics
+    model_results['abstention_rate'].append(abstention_rate)
+    model_results['accuracy'].append(accuracy)
+    model_results['average_set_size'].append(average_set_size)
+    
     return model_results
 
 def calculate_metrics_for_model(model_name, args):
@@ -244,7 +325,7 @@ def main(args):
         else:
             raise ValueError(f"Unrecognized mode: {args.mode}")
     with open(args.file_to_write, 'w') as f:
-        json.dump(full_result, f)
+        json.dump(full_result, f, indent=4)
 
 
 if __name__ == "__main__":
@@ -255,7 +336,15 @@ if __name__ == "__main__":
     parser.add_argument("--cal_ratio", type=float, default=0.5,
                         help="The ratio of data to be used as the calibration data.")
     parser.add_argument("--alpha", type=float, default=0.1,
-                        help="The error rate parameter.")
+                        help="The error rate parameter for predictions.")
+    parser.add_argument("--beta", type=float, default=0.05,
+                        help="The acceptable abstention rate.")
+    parser.add_argument("--cum_prob_threshold", type=float, default=0.9,
+                        help="Cumulative probability threshold for prediction sets.")
+    parser.add_argument("--lambda1", type=float, default=0.5,
+                        help="Weight for average set size in the cost function.")
+    parser.add_argument("--lambda2", type=float, default=0.5,
+                        help="Weight for abstention rate in the cost function.")
     args = parser.parse_args()
 
     main(args)
