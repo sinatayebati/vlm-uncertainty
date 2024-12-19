@@ -107,12 +107,16 @@ def main(args):
             if file_path.exists():
                 with open(file_path, 'rb') as f:
                     result_data = pickle.load(f)
-                    
+
+            try:
+                policy_params = load_policy(str(policy_path))
                 for cat_id in range(1, 10):
                     cat_data = [row for row in result_data if row['question_type_id'] == cat_id]
                     if cat_data:
                         metrics = evaluate_model(cat_data, policy_params, args.cal_ratio)
                         model_results[f"category_{cat_id}"] = metrics
+            except Exception as e:
+                    print(f"Error processing {model_name} - seedbench: {str(e)}")
                         
         elif args.mode == "oodcv":
             policy_file = f"{model_name}_oodcv_policy.pth"
@@ -121,18 +125,21 @@ def main(args):
             if not policy_path.exists():
                     print(f"Warning: Policy not found for {model_name} on oodcv")
                     continue
-
+            
             # Evaluate on OODCV categories
             file_path = Path(args.result_data_path) / model_name / "oodcv.pkl"
             if file_path.exists():
                 with open(file_path, 'rb') as f:
                     result_data = pickle.load(f)
-                    
+            try:
+                policy_params = load_policy(str(policy_path))
                 for situation in OODCV_CATS:
                     cat_data = [row for row in result_data if row['situation'] == situation]
                     if cat_data:
                         metrics = evaluate_model(cat_data, policy_params, args.cal_ratio)
                         model_results[situation] = metrics
+            except Exception as e:
+                    print(f"Error processing {model_name} - oodcv: {str(e)}")
 
         results[model_name] = model_results
 
