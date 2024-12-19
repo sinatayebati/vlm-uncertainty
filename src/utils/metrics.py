@@ -69,7 +69,6 @@ def compute_set_metrics(pred_outputs: Dict, test_id_to_answer: Dict) -> Dict[str
     correct_predictions = 0
     total_predictions = 0
     abstentions = 0
-    set_sizes = []
     coverage_count = 0
 
     for idx, prediction in pred_outputs.items():
@@ -78,7 +77,6 @@ def compute_set_metrics(pred_outputs: Dict, test_id_to_answer: Dict) -> Dict[str
         if prediction == 'abstain':
             abstentions += 1
         elif isinstance(prediction, list):
-            set_sizes.append(len(prediction))
             if true_answer in prediction:
                 coverage_count += 1
                 correct_predictions += 1
@@ -88,17 +86,15 @@ def compute_set_metrics(pred_outputs: Dict, test_id_to_answer: Dict) -> Dict[str
                 coverage_count += 1
                 correct_predictions += 1
             total_predictions += 1
-            set_sizes.append(1)
 
     total_instances = len(pred_outputs)
     pred_distribution = compute_prediction_distribution(pred_outputs)
-    total_set_sizes = cal_set_size(pred_outputs)
+    set_sizes = cal_set_size(pred_outputs)
 
     metrics = {
         'accuracy': correct_predictions / total_predictions if total_predictions > 0 else 0.0,
         'coverage': coverage_count / total_instances,
-        'average_set_size': np.mean(set_sizes) if set_sizes else 0.0,
-        'set_sizes': total_set_sizes,
+        'set_sizes': set_sizes,
         'uacc': (correct_predictions / total_predictions) * np.sqrt(len(ALL_OPTIONS)) / np.mean(set_sizes) if set_sizes else 0.0,
         **pred_distribution
     }
