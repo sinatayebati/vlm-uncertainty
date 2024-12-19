@@ -23,12 +23,11 @@ def compute_base_metrics(test_result_data: List[Dict]) -> Tuple[float, float, fl
         preds.append(pred_answer)
         res.append(1 if pred_answer == truth_answer else 0)
     
-    acc = sum(res) / len(res)
     counts = Counter(preds)
     E_ratio = counts.get("E", 0) / len(preds)
     F_ratio = counts.get("F", 0) / len(preds)
     
-    return acc, E_ratio, F_ratio
+    return E_ratio, F_ratio
 
 def compute_calibration_error(result_data: List[Dict], norm: str = 'l1') -> float:
     """Compute calibration error (ECE or MCE based on norm)."""

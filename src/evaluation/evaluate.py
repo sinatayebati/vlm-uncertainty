@@ -36,21 +36,22 @@ def evaluate_model(
     test_id_to_answer = {str(row["id"]): row["answer"] for row in test_result_data}
 
     # Compute base metrics
-    acc, E_ratio, F_ratio = compute_base_metrics(test_result_data)
+    E_ratio, F_ratio = compute_base_metrics(test_result_data)
 
     # Compute calibration errors
     ece = compute_calibration_error(result_data, norm='l1')
     mce = compute_calibration_error(result_data, norm='max')
 
     # Get prediction sets using Abstention_CP
-    pred_outputs = Abstention_CP(cal_result_data, test_result_data, policy_params)
+    pred_outputs, accuracy, abstention_rate, average_set_size = Abstention_CP(
+        cal_result_data, test_result_data, policy_params
+    )
 
     # Compute set-based metrics
     set_metrics = compute_set_metrics(pred_outputs, test_id_to_answer)
 
     # Combine all metrics
     metrics = {
-        'acc': acc,
         'E_ratio': E_ratio,
         'F_ratio': F_ratio,
         'ece': ece,

@@ -3,6 +3,7 @@ datasets/
 __pycache__/
 trained_policies/
 tables/
+evaluation_results/
 logs/
 *.pth
 *.pt
