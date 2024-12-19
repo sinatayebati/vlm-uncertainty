@@ -36,6 +36,34 @@ def compute_calibration_error(result_data: List[Dict], norm: str = 'l1') -> floa
     metric = MulticlassCalibrationError(num_classes=6, n_bins=15, norm=norm)
     return metric(pred, target).item()
 
+def compute_prediction_distribution(pred_outputs: Dict) -> Dict[str, float]:
+    """Compute distribution of prediction types (single, set, abstain)."""
+    total = len(pred_outputs)
+    singles = 0
+    sets = 0
+    abstains = 0
+    
+    for prediction in pred_outputs.values():
+        if prediction == 'abstain':
+            abstains += 1
+        elif isinstance(prediction, list):
+            sets += 1
+        else:  # single prediction
+            singles += 1
+    
+    return {
+        'single_pred_rate': singles / total if total > 0 else 0.0,
+        'set_pred_rate': sets / total if total > 0 else 0.0,
+        'abstain_rate': abstains / total if total > 0 else 0.0
+    }
+
+def cal_set_size(pred_outputs):
+    """Calculate average size of prediction sets (excluding single predictions and abstentions)."""
+    sz = []
+    for k, v in pred_outputs.items():
+        sz.append(len(v))
+    return sum(sz) /len(sz)
+
 def compute_set_metrics(pred_outputs: Dict, test_id_to_answer: Dict) -> Dict[str, float]:
     """Compute metrics for prediction sets including coverage and set sizes."""
     correct_predictions = 0
@@ -63,12 +91,16 @@ def compute_set_metrics(pred_outputs: Dict, test_id_to_answer: Dict) -> Dict[str
             set_sizes.append(1)
 
     total_instances = len(pred_outputs)
+    pred_distribution = compute_prediction_distribution(pred_outputs)
+    total_set_sizes = cal_set_size(pred_outputs)
+
     metrics = {
         'accuracy': correct_predictions / total_predictions if total_predictions > 0 else 0.0,
         'coverage': coverage_count / total_instances,
-        'abstention_rate': abstentions / total_instances,
         'average_set_size': np.mean(set_sizes) if set_sizes else 0.0,
-        'uacc': (correct_predictions / total_predictions) * np.sqrt(len(ALL_OPTIONS)) / np.mean(set_sizes) if set_sizes else 0.0
+        'set_sizes': total_set_sizes,
+        'uacc': (correct_predictions / total_predictions) * np.sqrt(len(ALL_OPTIONS)) / np.mean(set_sizes) if set_sizes else 0.0,
+        **pred_distribution
     }
     
     return metrics
