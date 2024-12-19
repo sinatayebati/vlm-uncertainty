@@ -110,28 +110,17 @@ To get model logits in four benchmarks run command from `scripts/run.sh`.
 python -m uncertainty_quantification_via_cp --result_data_path 'output' --file_to_write 'full_result.json'
 ```
 
-### To train the abstention model
+<!-- ### To train the abstention model
 ```shell
 python abstention_training.py --result_data_path output --file_to_write optimization_results.json --n_calls 50
-```
+``` -->
 
 ### To train the abstention model with RL
 ```shell
-python abstention_training_rl.py \
-    --result_data_path output \
-    --save_model_path trained_policies \
-    --learning_rate 1e-3 \
-    --epochs 500 \
-    --adjustment_scale 0.05 \
-    --lambda1 0.5 \
-    --lambda2 0.5 \
-    --alpha 0.1 \
-    --beta 0.05 \
-    --cum_prob_threshold 0.9
+bash scripts/train_all_models.sh
 ```
 
-### To get result tables by uncertainty
-
+### To evaluate the abstention model
 ```shell
-python -m make_tables --result_path 'full_result.json' --dir_to_write 'tables'
+bash scripts/evaluate_policies.sh
 ```
