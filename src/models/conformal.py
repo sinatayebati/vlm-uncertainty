@@ -10,7 +10,6 @@ def softmax(x: np.ndarray) -> np.ndarray:
     e_x = np.exp(x - np.max(x))
     return e_x / e_x.sum()
 
-
 def Abstention_CP(cal_result_data, test_result_data, args: Dict):
     """
     Differentiable version of Abstention_CP.
@@ -84,7 +83,10 @@ def Abstention_CP(cal_result_data, test_result_data, args: Dict):
         if action == 0:
             # Predict single answer
             predicted_label = ALL_OPTIONS[torch.argmax(probs).item()]
-            pred_outputs[str(row["id"])] = predicted_label
+            pred_outputs[str(row["id"])] = {
+                'prediction': predicted_label,
+                'logits': row["logits"][:6]  # Store logits with prediction
+            }
             if predicted_label == true_answer:
                 metrics["correct_predictions"] += 1.0
             metrics["total_predictions"] += 1.0
@@ -93,16 +95,17 @@ def Abstention_CP(cal_result_data, test_result_data, args: Dict):
             # Predict set of answers
             sorted_probs, sorted_indices = torch.sort(probs, descending=True)
             cumulative_probs = torch.cumsum(sorted_probs, dim=0)
-            # Use smooth threshold for cumulative probability
             cum_threshold = torch.sigmoid(10 * (cumulative_probs - cum_prob_threshold))
-            # Find indices where cum_threshold >= 0.5
             indices = torch.nonzero(cum_threshold >= 0.5, as_tuple=False)
             if indices.numel() > 0:
                 set_size = indices[0].item() + 1
             else:
                 set_size = len(cum_threshold)
             pred_set = [ALL_OPTIONS[idx.item()] for idx in sorted_indices[:set_size]]
-            pred_outputs[str(row["id"])] = pred_set
+            pred_outputs[str(row["id"])] = {
+                'prediction': pred_set,
+                'logits': row["logits"][:6]  # Store logits with prediction set
+            }
 
             if true_answer in pred_set:
                 metrics["correct_predictions"] += 1.0
@@ -111,7 +114,10 @@ def Abstention_CP(cal_result_data, test_result_data, args: Dict):
 
         else:
             # Abstain
-            pred_outputs[str(row["id"])] = 'abstain'
+            pred_outputs[str(row["id"])] = {
+                'prediction': 'abstain',
+                'logits': row["logits"][:6]  # Store logits even with abstention
+            }
             metrics["abstentions"] += 1.0
 
     # Compute metrics as tensors

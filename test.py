@@ -9,5 +9,5 @@ def inspect_checkpoint(file_path):
     pp.pprint(checkpoint)
 
 if __name__ == "__main__":
-    file_path = "/home/sina/projects/VLM-Uncertainty-Bench/trained_policies/Yi-VL-34B/Yi-VL-34B_mmbench_policy.pth"
+    file_path = "/home/sina/projects/VLM-Uncertainty-Bench/trained_policies/Yi-VL-34B/Yi-VL-34B_scienceqa_policy.pth"
     inspect_checkpoint(file_path)
