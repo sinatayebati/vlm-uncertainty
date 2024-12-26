@@ -10,7 +10,6 @@ from tqdm import tqdm
 
 from src.models.conformal import Abstention_CP
 from src.utils.metrics import (
-    compute_base_metrics,
     compute_calibration_error,
     compute_set_metrics
 )
@@ -18,7 +17,7 @@ from data_utils import DATASETS, SEEDBENCH_CATS, OODCV_CATS
 
 BASELINE_PARAMS = {
     'alpha': 0.1,
-    'beta': 0.1,
+    'beta': 0.2,
     'cum_prob_threshold': 0.9
 }
 
@@ -42,9 +41,6 @@ def evaluate_model(
     # Create test_id_to_answer mapping
     test_id_to_answer = {str(row["id"]): row["answer"] for row in test_result_data}
 
-    # Compute base metrics
-    E_ratio, F_ratio = compute_base_metrics(test_result_data)
-
     # Compute calibration errors
     ece = compute_calibration_error(result_data, norm='l1')
     mce = compute_calibration_error(result_data, norm='max')
@@ -59,8 +55,6 @@ def evaluate_model(
 
     # Combine all metrics
     metrics = {
-        'E_ratio': E_ratio,
-        'F_ratio': F_ratio,
         'ece': ece,
         'mce': mce,
         **set_metrics
