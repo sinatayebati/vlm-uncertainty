@@ -64,8 +64,8 @@ def train_rl_policy(args, config):
                 # Update hyperparameters
                 new_params = current_params + actions * config['adjustment_scale']
                 # Ensure hyperparameters are within valid ranges
-                alpha = torch.clamp(new_params[0], 0.001, 0.1)
-                beta = torch.clamp(new_params[1], 0.001, 0.1)
+                alpha = torch.clamp(new_params[0], 0.05, 0.15)
+                beta = torch.clamp(new_params[1], 0.05, 0.15)
                 cum_prob_threshold = torch.clamp(new_params[2], 0.5, 1.0)
 
                 # Update args for metrics calculation

@@ -19,6 +19,12 @@ def Abstention_CP(cal_result_data, test_result_data, args: Dict):
     beta = args['beta']
     cum_prob_threshold = args['cum_prob_threshold']
 
+    cal_scores = []
+    for row in cal_result_data:
+        probs = softmax(row["logits"][:6])
+        truth_answer = row["answer"]
+        cal_scores.append(1 - probs[ALL_OPTIONS.index(truth_answer)])
+
     # Calculate thresholds using numpy
     n = len(cal_result_data)
     q_level_predict = np.ceil((n + 1) * (1 - alpha)) / n
@@ -27,9 +33,6 @@ def Abstention_CP(cal_result_data, test_result_data, args: Dict):
     # Clamp q_level values to [0, 1]
     q_level_predict = min(max(q_level_predict, 0.0), 1.0)
     q_level_abstain = min(max(q_level_abstain, 0.0), 1.0)
-
-    # Get calibration scores
-    cal_scores = [1 - max(softmax(row["logits"][:6])) for row in cal_result_data]
 
     # Calculate qhat using numpy quantile
     qhat_predict = np.quantile(cal_scores, q_level_predict, method='higher')
@@ -51,13 +54,16 @@ def Abstention_CP(cal_result_data, test_result_data, args: Dict):
     for row in test_result_data:
         logits = torch.tensor(row["logits"][:6], dtype=torch.float32)
         probs = F.softmax(logits, dim=0)
-        max_prob = torch.max(probs).item()
-        score = torch.tensor(1 - max_prob, dtype=torch.float32)
+        # max_prob = torch.max(probs).item()
+        # score = torch.tensor(1 - max_prob, dtype=torch.float32)
+        scores = [1 - prob for prob in probs]
 
         # Use smooth functions to compute action probabilities
         # Action probabilities for predicting single answer, predicting set, and abstain
-        p_single = torch.sigmoid(-10 * (score - qhat_predict))
-        p_abstain = torch.sigmoid(10 * (score - qhat_abstain))
+        p_single = torch.sigmoid(-10 * (torch.min(torch.tensor(scores)) - qhat_predict))
+        p_abstain = torch.sigmoid(10 * (torch.min(torch.tensor(scores)) - qhat_abstain))
+        # p_single = torch.sigmoid(-10 * (score - qhat_predict))
+        # p_abstain = torch.sigmoid(10 * (score - qhat_abstain))
         p_set = torch.clamp(1 - p_single - p_abstain, min=0.0)
 
         # Normalize probabilities
