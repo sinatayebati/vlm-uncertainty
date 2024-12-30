@@ -1,16 +1,19 @@
 # Training parameters
 learning_rate: 0.001
-epochs: 500
-adjustment_scale: 0.01
+epochs: 200
+adjustment_scale: 0.005
 
 # Cost function weights
-lambda1: 0.5  # Weight for average set size
-lambda2: 0.5  # Weight for abstention rate
+lambda1: 0.3  # Weight for average set size
+lambda2: 0.3  # Weight for abstention rate
+lambda3: 0.4  # Coverage reward weight
+lambda4: 0.2  # Diversity bonus weight
+lambda5: 0.5  # Extreme imbalance penalty weight
 
 # Initial hyperparameters
-alpha: 0.1    # Initial error rate parameter
-beta: 0.05    # Initial abstention rate parameter
-cum_prob_threshold: 0.9  # Initial cumulative probability threshold
+alpha: 0.85  # Initial error rate parameter
+beta: 0.025   # Initial abstention rate parameter
+cum_prob_threshold: 0.87  # Initial cumulative probability threshold
 
 # Data parameters
 cal_ratio: 0.5  # Calibration set ratio

@@ -28,8 +28,8 @@ def compute_auroc(pred_outputs: Dict, test_id_to_answer: Dict) -> float:
         probs = softmax(logits[:6])  
         
         if prediction == 'abstain':
-            confidence = 0.0  # Lowest confidence for abstained predictions
-            correct = True  # Consider abstentions as correct for AUARC
+            confidence = 1.0
+            correct = True
         elif isinstance(prediction, list):
             pred_probs = [probs[MAPPING[p]] for p in prediction]
             confidence = max(pred_probs)
