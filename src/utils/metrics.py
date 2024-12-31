@@ -206,34 +206,37 @@ def compute_accuracy_vs_size_curve(pred_outputs: Dict, test_id_to_answer: Dict) 
 
 def compute_set_metrics(pred_outputs: Dict, test_id_to_answer: Dict) -> Dict[str, float]:
     """Compute metrics for prediction sets including coverage and set sizes."""
-    cover_conservative = []
-    cover_all = []
+    cover = []
     correct_predictions = []
 
     for idx, output in pred_outputs.items():
         true_answer = test_id_to_answer[idx]
-        prediction = output['prediction'] 
+        prediction = output['prediction']
+        logits = output['logits'][:6]  
+        probs = softmax(logits)  
         
         if prediction == 'abstain':
-            cover_all.append(1)
+            cover.append(1)
             continue
         elif isinstance(prediction, list):
-            if true_answer in prediction:
-                cover_conservative.append(1)
-                cover_all.append(1)
+            pred_probs = [(p, probs[MAPPING[p]]) for p in prediction]
+            max_prob_pred = max(pred_probs, key=lambda x: x[1])[0]
+            
+            if max_prob_pred == true_answer:
                 correct_predictions.append(1)
             else:
-                cover_conservative.append(0)
-                cover_all.append(0)
                 correct_predictions.append(0)
-        else:  # single prediction
+                
+            if true_answer in prediction:
+                cover.append(1)
+            else:
+                cover.append(0)
+        else:
             if prediction == true_answer:
-                cover_conservative.append(1)
-                cover_all.append(1)
+                cover.append(1)
                 correct_predictions.append(1)
             else:
-                cover_conservative.append(0)
-                cover_all.append(0)
+                cover.append(0)
                 correct_predictions.append(0)
 
     total_instance = len(pred_outputs)
@@ -244,17 +247,12 @@ def compute_set_metrics(pred_outputs: Dict, test_id_to_answer: Dict) -> Dict[str
 
     metrics = {
         'accuracy': sum(correct_predictions) / len(correct_predictions) if correct_predictions else 0.0,
-        'coverage': sum(cover_all) / total_instance if cover_all else 0.0,
-        'coverage_conservative': sum(cover_conservative) / total_instance if cover_conservative else 0.0,
+        'coverage': sum(cover) / total_instance if cover else 0.0,
         'set_sizes': set_sizes,
         'uacc': (sum(correct_predictions) / len(correct_predictions)) * np.sqrt(len(ALL_OPTIONS)) / set_sizes if set_sizes and correct_predictions else 0.0,
         'auroc': auroc,
         'auarc': auarc,
         **pred_distribution
     }
-    
-    # Accuracy vs size curve
-    # size_curve = compute_accuracy_vs_size_curve(pred_outputs, test_id_to_answer)
-    # metrics['acc_size_curve'] = size_curve
     
     return metrics

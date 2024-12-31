@@ -83,26 +83,6 @@ def Abstention_CP(cal_result_data, test_result_data, args: Dict):
                 metrics["correct_predictions"] += 1.0
             metrics["total_predictions"] += 1.0
 
-        # elif action == 1:
-        #     sorted_probs, sorted_indices = torch.sort(probs, descending=True)
-        #     cumulative_probs = torch.cumsum(sorted_probs, dim=0)
-        #     cum_threshold = torch.sigmoid(10 * (cumulative_probs - cum_prob_threshold))
-        #     indices = torch.nonzero(cum_threshold >= 0.5, as_tuple=False)
-        #     if indices.numel() > 0:
-        #         set_size = indices[0].item() + 1
-        #     else:
-        #         set_size = len(cum_threshold)
-        #     pred_set = [ALL_OPTIONS[idx.item()] for idx in sorted_indices[:set_size]]
-        #     pred_outputs[str(row["id"])] = {
-        #         'prediction': pred_set,
-        #         'logits': row["logits"][:6]
-        #     }
-
-        #     if true_answer in pred_set:
-        #         metrics["correct_predictions"] += 1.0
-        #     metrics["total_predictions"] += 1.0
-        #     metrics["set_sizes"].append(set_size)
-
         elif action == 1:
             probs = F.softmax(logits, dim=0)
             pred_set = []
