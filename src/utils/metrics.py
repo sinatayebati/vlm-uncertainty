@@ -31,8 +31,11 @@ def compute_auroc(pred_outputs: Dict, test_id_to_answer: Dict) -> float:
             confidence = 1.0
             correct = True
         elif isinstance(prediction, list):
+            true_answer_prob = probs[MAPPING[true_answer]] if true_answer in prediction else 0
             pred_probs = [probs[MAPPING[p]] for p in prediction]
-            confidence = max(pred_probs)
+            max_prob = max(pred_probs)
+            
+            confidence = 0.7 * max_prob + 0.3 * true_answer_prob
             correct = true_answer in prediction
         else:
             confidence = probs[MAPPING[prediction]]
@@ -224,6 +227,8 @@ def compute_set_metrics(pred_outputs: Dict, test_id_to_answer: Dict) -> Dict[str
             
             if max_prob_pred == true_answer:
                 correct_predictions.append(1)
+            elif true_answer in prediction:
+                correct_predictions.append(1 / len(prediction))
             else:
                 correct_predictions.append(0)
                 
