@@ -104,23 +104,12 @@ git clone https://huggingface.co/01-ai/Yi-VL-6B
 
 To get model logits in four benchmarks run command from `scripts/run.sh`.
 
-### To quantify uncertainty by logits
-
-```shell
-python -m uncertainty_quantification_via_cp --result_data_path 'output' --file_to_write 'full_result.json'
-```
-
-<!-- ### To train the abstention model
-```shell
-python abstention_training.py --result_data_path output --file_to_write optimization_results.json --n_calls 50
-``` -->
-
 ### To train the abstention model with RL
 ```shell
 bash scripts/train_all_models.sh
 ```
 
-### To evaluate the abstention model
+### To evaluate the abstention model + uncertainty quantification benchmark
 ```shell
 bash scripts/evaluate_policies.sh
 ```

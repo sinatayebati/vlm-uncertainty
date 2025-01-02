@@ -16,9 +16,23 @@ def load_config(config_path):
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
 
+def calculate_prediction_diversity_bonus(single_pred_count, set_pred_count, abstain_count, total_count):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    props = torch.tensor([
+        single_pred_count/total_count,
+        set_pred_count/total_count,
+        abstain_count/total_count
+    ], device=device)
+    
+    eps = 1e-8
+    entropy = -torch.sum(props * torch.log(props + eps))
+    return entropy
+
 def train_rl_policy(args, config):
-    # Initialize policy network and optimizer
-    policy_net = PolicyNetwork()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+
+    policy_net = PolicyNetwork().to(device)
     optimizer = optim.Adam(policy_net.parameters(), lr=config['learning_rate'])
     models = os.listdir(args.result_data_path)
 
@@ -26,12 +40,11 @@ def train_rl_policy(args, config):
         print(f"Training policy for model: {model_name}")
         model_path = os.path.join(args.result_data_path, model_name)
         
-        # Create model-specific directory for saving policies
         model_save_path = pathlib.Path(args.save_model_path) / model_name
         model_save_path.mkdir(parents=True, exist_ok=True)
 
-        # Initialize hyperparameters
-        hyperparams = torch.tensor([config['alpha'], config['beta'], config['cum_prob_threshold']])
+        hyperparams = torch.tensor([config['alpha'], config['beta'], config['cum_prob_threshold']], 
+                                 device=device)
 
         for dataset_name in DATASETS:
             print(f"Dataset: {dataset_name}")
@@ -41,63 +54,71 @@ def train_rl_policy(args, config):
             with open(file_name, 'rb') as f:
                 result_data = pickle.load(f)
 
-            # Split data into calibration and test sets
             cal_result_data, test_result_data = train_test_split(
                 result_data, train_size=config['cal_ratio'], random_state=42
             )
 
             # Training loop
             for epoch in range(config['epochs']):
-                # Get current hyperparameters
-                current_params = hyperparams
+                current_params = hyperparams.to(device)
 
-                # Get mean and std from policy network
                 mean, std = policy_net(current_params)
 
-                # Create a normal distribution and sample actions
                 dist = torch.distributions.Normal(mean, std)
                 actions = dist.sample()
 
-                # Calculate log probabilities
                 log_probs = dist.log_prob(actions)
 
-                # Update hyperparameters
                 new_params = current_params + actions * config['adjustment_scale']
-                # Ensure hyperparameters are within valid ranges
-                alpha = torch.clamp(new_params[0], 0.001, 0.1)
-                beta = torch.clamp(new_params[1], 0.001, 0.1)
-                cum_prob_threshold = torch.clamp(new_params[2], 0.5, 1.0)
+                
+                alpha = torch.clamp(new_params[0], 0.75, 0.9)
+                beta = torch.clamp(new_params[1], 0.01, 0.05)
+                cum_prob_threshold = torch.clamp(new_params[2], 0.85, 0.90)
 
-                # Update args for metrics calculation
                 config['alpha'] = alpha.item()
                 config['beta'] = beta.item()
                 config['cum_prob_threshold'] = cum_prob_threshold.item()
 
-                # Run environment step
-                _, accuracy, abstention_rate, average_set_size = Abstention_CP(
+                pred_outputs, accuracy, abstention_rate, average_set_size = Abstention_CP(
                     cal_result_data, test_result_data, config
                 )
 
-                # Compute reward
+                single_pred_count = sum(1 for p in pred_outputs.values() if isinstance(p['prediction'], str) and p['prediction'] != 'abstain')
+                set_pred_count = sum(1 for p in pred_outputs.values() if isinstance(p['prediction'], list))
+                abstain_count = sum(1 for p in pred_outputs.values() if p['prediction'] == 'abstain')
+                total_count = len(pred_outputs)
+
+                single_pred_ratio = single_pred_count / total_count
+                set_pred_ratio = set_pred_count / total_count
+                abstain_ratio = abstain_count / total_count
+
+                coverage = 1.0 - abstention_rate
+
+                diversity_bonus = calculate_prediction_diversity_bonus(
+                    single_pred_count, set_pred_count, abstain_count, total_count
+                )
+
                 error_rate = 1.0 - accuracy
-                cost = error_rate + config['lambda1'] * average_set_size + config['lambda2'] * abstention_rate
-                reward = -cost  # Negative cost as reward
+                base_cost = error_rate + config['lambda1'] * average_set_size + config['lambda2'] * abstention_rate
+                cost = base_cost - config['lambda3'] * coverage - config['lambda4'] * diversity_bonus
 
-                # Compute policy loss
-                loss = -log_probs.sum() * reward  # Multiply by reward
+                if single_pred_ratio > 0.8:
+                    cost += config['lambda5'] * (single_pred_ratio - 0.8)
 
-                # Backpropagate and update policy network
+                reward = -cost
+
+                loss = -log_probs.sum() * reward
+
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
-                # Update hyperparameters for next iteration
-                hyperparams = torch.tensor([alpha.item(), beta.item(), cum_prob_threshold.item()])
+                hyperparams = torch.tensor([alpha.item(), beta.item(), cum_prob_threshold.item()], 
+                                        device=device)
 
                 if epoch % 10 == 0:
                     print(f"Epoch {epoch}, Cost: {cost}, Hyperparameters: alpha={alpha.item()}, beta={beta.item()}, cum_prob_threshold={cum_prob_threshold.item()}")
 
-            # Save the trained policy network with organized structure
             save_path = model_save_path / f"{model_name}_{dataset_name}_policy.pth"
             torch.save({
                 'model_state_dict': policy_net.state_dict(),
@@ -125,16 +146,12 @@ def main():
                         help="Path to configuration file")
     args = parser.parse_args()
 
-    # Load configuration
     config = load_config(args.config_file)
 
-    # Create save directory if it doesn't exist
     os.makedirs(args.save_model_path, exist_ok=True)
 
-    # Run training
     train_rl_policy(args, config)
 
-# Use this pattern for module execution
 def run_module():
     main()
 

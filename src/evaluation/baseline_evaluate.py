@@ -18,7 +18,7 @@ from torchmetrics.classification import MulticlassCalibrationError
 from data_utils.common_utils import ALL_OPTIONS
 from data_utils import DATASETS, SEEDBENCH_CATS, OODCV_CATS
 
-MAPPING = {'A':0 , 'B':1, 'C':2, 'D':3}
+MAPPING = {'A':0, 'B':1, 'C':2, 'D':3, 'E':4, 'F':5}
 
 def softmax(x):
     e_x = np.exp(x - np.max(x))
@@ -158,75 +158,39 @@ def compute_baseline_auroc(pred_sets: Dict, test_id_to_answer: Dict) -> float:
     except ValueError:
         return 0.5
 
-def compute_baseline_auarc(pred_sets: Dict, test_id_to_answer: Dict) -> float:
-    """Compute AUARC for baseline methods."""
+
+def compute_baseline_auarc(pred_outputs: Dict, test_id_to_answer: Dict) -> float:
+    """
+    Compute Area Under Accuracy-Rejection Curve (AUARC).
+    """
+
     confidences = []
     correctness = []
     
-    for idx, output in pred_sets.items():
+    for idx, output in pred_outputs.items():
         true_answer = test_id_to_answer[idx]
         prediction = output['prediction']
         logits = output['logits']
-        probs = softmax(logits)
-        
-        # For set predictions, use maximum probability among predicted classes
-        pred_probs = [probs[ALL_OPTIONS.index(p)] for p in prediction]
+        probs = softmax(logits[:6])
+
+        pred_probs = [probs[MAPPING[p]] for p in prediction]
         confidence = max(pred_probs)
         correct = true_answer in prediction
             
         confidences.append(confidence)
         correctness.append(1.0 if correct else 0.0)
-    
-    sorted_pairs = sorted(zip(confidences, correctness), reverse=True)
 
-    # Calculate accuracy at each possible confidence threshold
-    accuracies = []  
-    coverages = []  
+    confidences = np.array(confidences)
+    correctness = np.array(correctness)
     
-    total_samples = len(sorted_pairs)
-    running_correct = 0
-    running_total = 0
+    sort_idx = np.argsort(confidences)
+    sorted_correctness = correctness[sort_idx]
     
-    current_conf = None
-    current_batch_correct = 0
-    current_batch_size = 0
+    mean_accuracies = np.cumsum(sorted_correctness[::-1]) / np.arange(1, len(sorted_correctness) + 1)
     
-    for confidence, correct in sorted_pairs:
-        if confidence != current_conf:
-            if current_conf is not None:
-                running_correct += current_batch_correct
-                running_total += current_batch_size
-                
-                accuracy = running_correct / running_total
-                coverage = running_total / total_samples
-                
-                accuracies.append(accuracy)
-                coverages.append(coverage)
-            
-            current_conf = confidence
-            current_batch_correct = 0
-            current_batch_size = 0
-        
-        current_batch_correct += correct
-        current_batch_size += 1
+    coverage_points = np.linspace(0, 1, len(sorted_correctness))
     
-    # Add the final batch
-    if current_batch_size > 0:
-        running_correct += current_batch_correct
-        running_total += current_batch_size
-        accuracy = running_correct / running_total
-        coverage = running_total / total_samples
-        accuracies.append(accuracy)
-        coverages.append(coverage)
-    
-    if coverages[0] != 0.0:
-        coverages.insert(0, 0.0)
-        accuracies.insert(0, 1.0)  
-    if coverages[-1] != 1.0:
-        coverages.append(1.0)
-        accuracies.append(accuracies[-1])  
-    
-    return auc(coverages, accuracies)
+    return auc(coverage_points, mean_accuracies)
 
 
 def cal_coverage(pred_sets, test_id_to_answer):
@@ -255,16 +219,14 @@ def compute_precision_at_k(pred_outputs: Dict, test_id_to_answer: Dict, k: int) 
     """
     correct_at_k = []
     cover_all = []
-    total_predictions = len(pred_outputs)  # Count all predictions including abstentions
+    total_predictions = len(pred_outputs)
     
     for idx, output in pred_outputs.items():
         prediction = output['prediction']
         true_answer = test_id_to_answer[idx]
         
-        # Convert single predictions to list format for uniform handling
         pred_set = [prediction] if isinstance(prediction, str) else prediction
         
-        # Only evaluate precision for predictions with set size k
         if len(pred_set) == k:
             if true_answer in pred_set:
                 cover_all.append(1)
@@ -364,7 +326,6 @@ def calculate_metrics_for_model(model_name, args):
         with open(file_name, 'rb') as f:
             result_data = pickle.load(f)
         
-        # Store metrics for each dataset separately
         model_results[dataset_name] = calculate_metrics(result_data, args)
     return model_results
 

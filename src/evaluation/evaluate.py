@@ -16,8 +16,8 @@ from src.utils.metrics import (
 from data_utils import DATASETS, SEEDBENCH_CATS, OODCV_CATS
 
 BASELINE_PARAMS = {
-    'alpha': 0.1,
-    'beta': 0.2,
+    'alpha': 0.9,
+    'beta': 0.05,
     'cum_prob_threshold': 0.9
 }
 
