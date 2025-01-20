@@ -43,8 +43,7 @@ def train_rl_policy(args, config):
         model_save_path = pathlib.Path(args.save_model_path) / model_name
         model_save_path.mkdir(parents=True, exist_ok=True)
 
-        hyperparams = torch.tensor([config['alpha'], config['beta'], config['cum_prob_threshold']], 
-                                 device=device)
+        hyperparams = torch.tensor([config['alpha'], config['beta']], device=device)
 
         for dataset_name in DATASETS:
             print(f"Dataset: {dataset_name}")
@@ -73,11 +72,9 @@ def train_rl_policy(args, config):
                 
                 alpha = torch.clamp(new_params[0], 0.75, 0.9)
                 beta = torch.clamp(new_params[1], 0.01, 0.05)
-                cum_prob_threshold = torch.clamp(new_params[2], 0.85, 0.90)
 
                 config['alpha'] = alpha.item()
                 config['beta'] = beta.item()
-                config['cum_prob_threshold'] = cum_prob_threshold.item()
 
                 pred_outputs, accuracy, abstention_rate, average_set_size = Abstention_CP(
                     cal_result_data, test_result_data, config
@@ -113,8 +110,7 @@ def train_rl_policy(args, config):
                 loss.backward()
                 optimizer.step()
 
-                hyperparams = torch.tensor([alpha.item(), beta.item(), cum_prob_threshold.item()], 
-                                        device=device)
+                hyperparams = torch.tensor([alpha.item(), beta.item()], device=device)
 
                 if epoch % 10 == 0:
                     print(f"Epoch {epoch}, Cost: {cost}, Hyperparameters: alpha={alpha.item()}, beta={beta.item()}, cum_prob_threshold={cum_prob_threshold.item()}")
@@ -126,7 +122,6 @@ def train_rl_policy(args, config):
                 'hyperparameters': {
                     'alpha': alpha.item(),
                     'beta': beta.item(),
-                    'cum_prob_threshold': cum_prob_threshold.item()
                 },
                 'final_metrics': {
                     'accuracy': accuracy,

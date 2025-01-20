@@ -40,6 +40,40 @@ def get_accuracy(test_result_data):
     return sum(res) / len(res), preds
 
 
+def compute_accuracy_cp(
+    pred_outputs: Dict[str, Dict],
+    test_id_to_answer: Dict[str, str],
+) -> float:
+    """
+    Compute accuracy for APS predictions
+    """
+    res = []
+    for idx, output in pred_outputs.items():
+        if idx not in test_id_to_answer:
+            continue
+        true_answer = test_id_to_answer[idx]
+        prediction = output['prediction']
+        logits = output['logits'][:6]  
+        probs = softmax(logits)  
+        
+        if isinstance(prediction, list):
+            pred_probs = [(p, probs[MAPPING[p]]) for p in prediction]
+            max_prob_pred = max(pred_probs, key=lambda x: x[1])[0]
+            
+            if max_prob_pred == true_answer:
+                res.append(1)
+            elif true_answer in prediction:
+                res.append(1 / len(prediction))
+            else:
+                res.append(0)
+        else:
+            if prediction == true_answer:
+                res.append(1.0)
+            else:
+                res.append(0.0)
+    return sum(res) / len(res) if res else 0.0
+
+
 def get_ce(result_data, norm):
     target = torch.tensor([MAPPING[row['answer']] for row in result_data])
     pred = torch.tensor(
@@ -50,6 +84,61 @@ def get_ce(result_data, norm):
     metric = MulticlassCalibrationError(num_classes=6, n_bins=15, norm=norm)
     res = metric(pred, target)
     return res.item()
+
+
+def get_ce_cp(
+    pred_outputs: Dict[str, Dict],
+    test_id_to_answer: Dict[str, str],
+    n_bins: int = 15
+) -> float:
+    """
+    Compute calibration error for APS method.
+    """
+    
+    confidences = []
+    correctness = []
+
+    for idx, output in pred_outputs.items():
+        if idx not in test_id_to_answer:
+            continue
+        true_answer = test_id_to_answer[idx]
+        prediction = output['prediction']
+        logits = output['logits'][:6]
+        probs = softmax(np.array(logits))
+        
+        if isinstance(prediction, list):
+            set_conf = max(probs[MAPPING[p]] for p in prediction)
+            is_correct = 1.0 if (true_answer in prediction) else 0.0
+        else:
+            set_conf = probs[MAPPING[prediction]] if prediction in ALL_OPTIONS else 0
+            is_correct = 1.0 if (prediction == true_answer) else 0.0
+        
+        confidences.append(set_conf)
+        correctness.append(is_correct)
+
+    if not confidences:
+        return 0.0
+
+    confidences = np.array(confidences)
+    correctness = np.array(correctness)
+
+    bin_boundaries = np.linspace(0.0, 1.0, n_bins + 1)
+    bin_indices = np.digitize(confidences, bin_boundaries, right=True)
+
+    total_samples = len(confidences)
+    ece = 0.0
+    for b in range(1, n_bins + 1):
+        bin_mask = (bin_indices == b)
+        bin_count = np.sum(bin_mask)
+        if bin_count == 0:
+            continue
+
+        avg_conf = np.mean(confidences[bin_mask])
+        avg_corr = np.mean(correctness[bin_mask])
+        ece_bin = abs(avg_conf - avg_corr) * (bin_count / total_samples)
+        ece += ece_bin
+
+    return ece
 
 
 def cal_acc(test_result_data):
@@ -131,7 +220,35 @@ def APS_CP(cal_result_data, test_result_data, alpha=0.1):
     return pred_sets
 
 
-def compute_baseline_auroc(pred_sets: Dict, test_id_to_answer: Dict) -> float:
+def compute_baseline_auroc(
+    result_data: List[Dict],
+) -> float:
+    """
+    Compute AUROC for the raw baseline that always picks the max-logit class.
+    """
+    confidences = []
+    correctness = []
+
+    for row in result_data:
+        truth_answer = row["answer"]
+        logits = row["logits"][:6]
+        probs = softmax(np.array(logits))
+        pred_label_idx = np.argmax(probs)
+        confidence = probs[pred_label_idx]
+        correct = (ALL_OPTIONS[pred_label_idx] == truth_answer)
+        
+        confidences.append(confidence)
+        correctness.append(1.0 if correct else 0.0)
+
+    if len(set(confidences)) < 2 or len(set(correctness)) < 2:
+        return 0.5
+    try:
+        return roc_auc_score(correctness, confidences)
+    except ValueError:
+        return 0.5
+
+
+def compute_auroc(pred_sets: Dict, test_id_to_answer: Dict) -> float:
     """Compute AUROC for baseline methods."""
     confidences = []
     correctness = []
@@ -141,8 +258,6 @@ def compute_baseline_auroc(pred_sets: Dict, test_id_to_answer: Dict) -> float:
         prediction = output['prediction']
         logits = output['logits']
         probs = softmax(logits)
-        
-        # For set predictions, use maximum probability among predicted classes
         pred_probs = [probs[ALL_OPTIONS.index(p)] for p in prediction]
         confidence = max(pred_probs)
         correct = true_answer in prediction
@@ -159,26 +274,64 @@ def compute_baseline_auroc(pred_sets: Dict, test_id_to_answer: Dict) -> float:
         return 0.5
 
 
-def compute_baseline_auarc(pred_outputs: Dict, test_id_to_answer: Dict) -> float:
+def compute_baseline_auarc(
+    result_data: List[Dict]
+) -> float:
     """
-    Compute Area Under Accuracy-Rejection Curve (AUARC).
+    Compute AUARC for the raw baseline that always picks the max-logit class.
     """
 
     confidences = []
     correctness = []
-    
-    for idx, output in pred_outputs.items():
-        true_answer = test_id_to_answer[idx]
-        prediction = output['prediction']
-        logits = output['logits']
-        probs = softmax(logits[:6])
 
-        pred_probs = [probs[MAPPING[p]] for p in prediction]
-        confidence = max(pred_probs)
-        correct = true_answer in prediction
-            
+    for row in result_data:
+        truth_answer = row["answer"]
+        logits = row["logits"][:6]
+        probs = softmax(np.array(logits))
+        pred_label_idx = np.argmax(probs)
+        confidence = probs[pred_label_idx]
+        correct = (ALL_OPTIONS[pred_label_idx] == truth_answer)
+
         confidences.append(confidence)
         correctness.append(1.0 if correct else 0.0)
+
+    confidences = np.array(confidences)
+    correctness = np.array(correctness)
+
+    sort_idx = np.argsort(confidences)
+    sorted_correctness = correctness[sort_idx]
+    
+    mean_accuracies = np.cumsum(sorted_correctness[::-1]) / np.arange(1, len(sorted_correctness) + 1)
+
+    coverage_points = np.linspace(0, 1, len(sorted_correctness))
+
+    return auc(coverage_points, mean_accuracies)
+
+
+def compute_auarc(pred_outputs: Dict, test_id_to_answer: Dict) -> float:
+    """
+    Compute Area Under Accuracy-Rejection Curve (AUARC).
+    """
+    confidences = []
+    correctness = []
+
+    for idx, output in pred_outputs.items():
+        if idx not in test_id_to_answer:
+            continue
+        true_answer = test_id_to_answer[idx]
+        prediction = output['prediction']
+        logits = output['logits'][:6]
+        probs = softmax(np.array(logits))
+        
+        if isinstance(prediction, list):
+            set_conf = max(probs[MAPPING[p]] for p in prediction)
+            is_correct = 1.0 if (true_answer in prediction) else 0.0
+        else:
+            set_conf = probs[MAPPING[prediction]] if prediction in ALL_OPTIONS else 0
+            is_correct = 1.0 if (prediction == true_answer) else 0.0
+
+        confidences.append(set_conf)
+        correctness.append(is_correct * set_conf)
 
     confidences = np.array(confidences)
     correctness = np.array(correctness)
@@ -282,18 +435,24 @@ def calculate_metrics(result_data, args):
     # Compute metrics for LAC
     coverage_LAC = cal_coverage(pred_sets_LAC, test_id_to_answer)
     set_sizes_LAC = cal_set_size(pred_sets_LAC)
-    auroc_LAC = compute_baseline_auroc(pred_sets_LAC, test_id_to_answer)
-    auarc_LAC = compute_baseline_auarc(pred_sets_LAC, test_id_to_answer)
-    uacc_LAC = acc * np.sqrt(len(ALL_OPTIONS)) / set_sizes_LAC
+    auroc_LAC = compute_auroc(pred_sets_LAC, test_id_to_answer)
+    auarc_LAC = compute_auarc(pred_sets_LAC, test_id_to_answer)
+    accuracy_LAC = compute_accuracy_cp(pred_sets_LAC, test_id_to_answer)
+    uacc_LAC = accuracy_LAC * np.sqrt(len(ALL_OPTIONS)) / set_sizes_LAC
+    ece_LAC = get_ce_cp(pred_sets_LAC, test_id_to_answer)
 
     # Compute metrics for APS
     coverage_APS = cal_coverage(pred_sets_APS, test_id_to_answer)
     set_sizes_APS = cal_set_size(pred_sets_APS)
-    auroc_APS = compute_baseline_auroc(pred_sets_APS, test_id_to_answer)
-    auarc_APS = compute_baseline_auarc(pred_sets_APS, test_id_to_answer)
-    uacc_APS = acc * np.sqrt(len(ALL_OPTIONS)) / set_sizes_APS
+    auroc_APS = compute_auroc(pred_sets_APS, test_id_to_answer)
+    auarc_APS = compute_auarc(pred_sets_APS, test_id_to_answer)
+    accuracy_APS = compute_accuracy_cp(pred_sets_APS, test_id_to_answer)
+    uacc_APS = accuracy_APS * np.sqrt(len(ALL_OPTIONS)) / set_sizes_APS
+    ece_APS = get_ce_cp(pred_sets_APS, test_id_to_answer)
 
-    # Calculate ECE and MCE
+    # Calculate baseline metrics
+    auroc_baseline = compute_baseline_auroc(test_result_data)
+    auarc_baseline = compute_baseline_auarc(test_result_data)
     ece = get_ce(result_data=result_data, norm='l1')
     mce = get_ce(result_data=result_data, norm='max')
 
@@ -302,20 +461,26 @@ def calculate_metrics(result_data, args):
         "F_ratio": F_ratio,
         "coverage_LAC": coverage_LAC,
         "set_sizes_LAC": set_sizes_LAC,
-        "uacc_LAC": uacc_LAC,
         "auroc_LAC": auroc_LAC,
         "auarc_LAC": auarc_LAC,
+        "accuracy_LAC": accuracy_LAC,
+        "uacc_LAC": uacc_LAC,
+        "ece_LAC": ece_LAC,
         "coverage_APS": coverage_APS,
         "set_sizes_APS": set_sizes_APS,
-        "uacc_APS": uacc_APS,
         "auroc_APS": auroc_APS,
         "auarc_APS": auarc_APS,
-        "ece": ece,
-        "mce": mce,
-        "accuracy": acc,
-        "coverage": np.mean([coverage_LAC, coverage_APS]),
-        "set_sizes": np.mean([set_sizes_LAC, set_sizes_APS]),
-        "uacc": np.mean([uacc_LAC, uacc_APS])
+        "accuracy_APS": accuracy_APS,
+        "uacc_APS": uacc_APS,
+        "ece_APS": ece_APS,
+        "coverage_mean": np.mean([coverage_LAC, coverage_APS]),
+        "set_sizes_mean": np.mean([set_sizes_LAC, set_sizes_APS]),
+        "uacc_mean": np.mean([uacc_LAC, uacc_APS]),
+        "auroc_baseline": auroc_baseline,
+        "auarc_baseline": auarc_baseline,
+        "accuracy_baseline": acc,
+        "ece_baseline": ece,
+        "mce_baseline": mce,
     }
 
 def calculate_metrics_for_model(model_name, args):
