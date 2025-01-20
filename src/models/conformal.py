@@ -17,7 +17,6 @@ def Abstention_CP(cal_result_data, test_result_data, args: Dict):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     alpha = args['alpha']
     beta = args['beta']
-    cum_prob_threshold = args['cum_prob_threshold']
 
     cal_scores = []
     for row in cal_result_data:

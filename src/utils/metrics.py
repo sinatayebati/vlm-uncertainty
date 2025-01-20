@@ -67,7 +67,7 @@ def compute_auarc(pred_outputs: Dict, test_id_to_answer: Dict) -> float:
         probs = softmax(logits[:6])
 
         if prediction == 'abstain':
-            confidence = 0.0
+            confidence = 1.0
             correct = True
         elif isinstance(prediction, list):
             pred_probs = [probs[MAPPING[p]] for p in prediction]
@@ -93,12 +93,60 @@ def compute_auarc(pred_outputs: Dict, test_id_to_answer: Dict) -> float:
     return auc(coverage_points, mean_accuracies)
 
 
-def compute_calibration_error(result_data: List[Dict], norm: str = 'l1') -> float:
-    """expected calibration error"""
-    target = torch.tensor([MAPPING[row['answer']] for row in result_data])
-    pred = torch.tensor(np.array([softmax(row['logits'][:6]) for row in result_data]))
-    metric = MulticlassCalibrationError(num_classes=6, n_bins=15, norm=norm)
-    return metric(pred, target).item()
+def compute_calibration_error(pred_outputs: Dict[str, Dict], test_id_to_answer: Dict[str, str],n_bins: int = 15) -> float:
+    """
+    Compute calibration error
+    """
+    confidences = []
+    correctnesses = []
+
+    for idx, output in pred_outputs.items():
+        true_answer = test_id_to_answer[idx]
+        prediction = output['prediction']
+        logits = output['logits'][:6]
+        probs = softmax(logits)
+
+        if prediction == 'abstain':
+            continue
+
+        elif isinstance(prediction, str):
+            conf = probs[MAPPING[prediction]]
+            correct = 1.0 if (prediction == true_answer) else 0.0
+            confidences.append(conf)
+            correctnesses.append(correct)
+
+        else:
+            set_prob = sum(probs[MAPPING[p]] for p in prediction)
+            conf = set_prob
+            correct = 1.0 if (true_answer in prediction) else 0.0
+            confidences.append(conf)
+            correctnesses.append(correct)
+
+    if not confidences:
+        return 0.0
+
+    confidences = np.array(confidences)
+    correctnesses = np.array(correctnesses)
+
+    bin_boundaries = np.linspace(0.0, 1.0, n_bins + 1)
+    bin_indices = np.digitize(confidences, bin_boundaries, right=True)
+
+    total_samples = len(confidences)
+    ece = 0.0
+
+    for b in range(1, n_bins + 1):
+        bin_mask = (bin_indices == b)
+        bin_count = np.sum(bin_mask)
+        if bin_count == 0:
+            continue
+
+        avg_conf = np.mean(confidences[bin_mask])
+        avg_corr = np.mean(correctnesses[bin_mask])
+        ece_bin = abs(avg_conf - avg_corr) * (bin_count / total_samples)
+        ece += ece_bin
+
+    return ece
+
 
 def compute_base_metrics(test_result_data: List[Dict]) -> Tuple[float, float, float]:
     """Compute accuracy and E/F ratios."""
@@ -131,7 +179,7 @@ def compute_prediction_distribution(pred_outputs: Dict) -> Dict[str, float]:
             abstains += 1
         elif isinstance(prediction, list):
             sets += 1
-        else:  # single prediction
+        else:
             singles += 1
     
     return {

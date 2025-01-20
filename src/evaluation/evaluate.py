@@ -33,30 +33,21 @@ def evaluate_model(
     cal_ratio: float = 0.5
 ) -> Dict[str, float]:
     """Evaluate a model using given parameters."""
-    # Split data into calibration and test sets
     cal_result_data, test_result_data = train_test_split(
         result_data, train_size=cal_ratio, random_state=42
     )
 
-    # Create test_id_to_answer mapping
     test_id_to_answer = {str(row["id"]): row["answer"] for row in test_result_data}
 
-    # Compute calibration errors
-    ece = compute_calibration_error(result_data, norm='l1')
-    mce = compute_calibration_error(result_data, norm='max')
-
-    # Get prediction sets using Abstention_CP
     pred_outputs, accuracy, abstention_rate, average_set_size = Abstention_CP(
         cal_result_data, test_result_data, policy_params
     )
 
-    # Compute set-based metrics
+    ece = compute_calibration_error(pred_outputs, test_id_to_answer)
     set_metrics = compute_set_metrics(pred_outputs, test_id_to_answer)
 
-    # Combine all metrics
     metrics = {
         'ece': ece,
-        'mce': mce,
         **set_metrics
     }
 
@@ -86,9 +77,7 @@ def main(args):
         policy_base_path = Path(args.policy_path) / model_name
         
         if args.mode == "all":
-            # Evaluate on all datasets
             for dataset_name in DATASETS:
-                # Load corresponding policy for this model and dataset
                 policy_file = f"{model_name}_{dataset_name}_policy.pth"
                 policy_path = policy_base_path / policy_file
                 
