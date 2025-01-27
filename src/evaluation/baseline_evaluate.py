@@ -525,7 +525,7 @@ def main(args):
     model_names = os.listdir(args.result_data_path)
     
     for model_name in tqdm(model_names):
-        if args.mode == "all":
+        if args.mode in ["all", "llm"]:
             model_metrics = calculate_metrics_for_model(model_name, args)
         elif args.mode == "seedbench":
             model_metrics = calculate_metrics_for_seedbench(model_name, args)

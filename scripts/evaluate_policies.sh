@@ -8,7 +8,7 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 export PYTHONUNBUFFERED=1
 
 # Parse command line arguments
-MODE=${1:-vlm}  # Default to 'vlm' if no argument provided
+MODE=${1:-all}  # default set to 'vlm'
 
 # Set paths based on mode
 if [ "$MODE" = "llm" ]; then
@@ -33,7 +33,7 @@ python -m src.evaluation.evaluate \
     --output_file "evaluation_results/all_results.json" \
     --mode "$MODE" 2>&1 | tee logs/eval_all_$(date +%Y%m%d_%H%M%S).log
 
-# Evaluate on all datasets using literature baseline method
+# Run evaluation on all datasets using literature baseline method
 python -m src.evaluation.baseline_evaluate \
     --result_data_path "$RESULT_PATH" \
     --file_to_write "evaluation_results/all_results_literature_baseline.json" \
