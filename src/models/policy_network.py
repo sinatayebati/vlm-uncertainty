@@ -5,11 +5,11 @@ class PolicyNetwork(nn.Module):
     def __init__(self):
         super(PolicyNetwork, self).__init__()
         self.fc = nn.Sequential(
-            nn.Linear(3, 64),
+            nn.Linear(2, 64),
             nn.ReLU(),
         )
-        self.mean_head = nn.Linear(64, 3)
-        self.log_std_head = nn.Linear(64, 3)
+        self.mean_head = nn.Linear(64, 2)
+        self.log_std_head = nn.Linear(64, 2)
 
     def forward(self, x):
         x = self.fc(x)
