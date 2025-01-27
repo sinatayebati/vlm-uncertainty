@@ -9,6 +9,7 @@ evaluation_results/
 logs/
 output/
 output_llm/
+test.py
 *.pth
 *.pt
 *.pth.tar
