@@ -16,7 +16,7 @@ import torch.nn.functional as F
 from torchmetrics.classification import MulticlassCalibrationError
 
 from data_utils.common_utils import ALL_OPTIONS
-from data_utils import DATASETS, SEEDBENCH_CATS, OODCV_CATS
+from data_utils import DATASETS, LLM_DATASETS, SEEDBENCH_CATS, OODCV_CATS
 
 MAPPING = {'A':0, 'B':1, 'C':2, 'D':3, 'E':4, 'F':5}
 
@@ -486,7 +486,10 @@ def calculate_metrics(result_data, args):
 def calculate_metrics_for_model(model_name, args):
     """Modified to store results by dataset"""
     model_results = {}
-    for dataset_name in DATASETS:
+    # Determine which dataset list to use based on mode
+    datasets_to_use = LLM_DATASETS if args.mode == 'llm' else DATASETS
+    
+    for dataset_name in datasets_to_use:
         file_name = f'{args.result_data_path}/{model_name}/{dataset_name}.pkl'
         with open(file_name, 'rb') as f:
             result_data = pickle.load(f)
@@ -522,7 +525,7 @@ def main(args):
     model_names = os.listdir(args.result_data_path)
     
     for model_name in tqdm(model_names):
-        if args.mode == "all":
+        if args.mode in ["all", "llm"]:
             model_metrics = calculate_metrics_for_model(model_name, args)
         elif args.mode == "seedbench":
             model_metrics = calculate_metrics_for_seedbench(model_name, args)
@@ -541,7 +544,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--result_data_path", type=str, required=True)
     parser.add_argument("--file_to_write", type=str, required=True)
-    parser.add_argument("--mode", choices=["all", "seedbench", "oodcv"], default="all")
+    parser.add_argument("--mode", choices=["all", "seedbench", "oodcv", "llm"], default="all")
     parser.add_argument("--cal_ratio", type=float, default=0.5,
                         help="The ratio of data to be used as the calibration data.")
     parser.add_argument("--alpha", type=float, default=0.1,

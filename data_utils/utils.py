@@ -15,6 +15,14 @@ DATASETS = [
     'ai2d'
 ]
 
+LLM_DATASETS = [
+    'cosmosqa',
+    'halu_dialogue',
+    'halu_summarization',
+    'hellaswag',
+    'mmlu'
+]
+
 SEEDBENCH_CATS = {
     'Scene Understanding': 1,
     'Instance Identity': 2,

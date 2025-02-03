@@ -13,7 +13,7 @@ from src.utils.metrics import (
     compute_calibration_error,
     compute_set_metrics
 )
-from data_utils import DATASETS, SEEDBENCH_CATS, OODCV_CATS
+from data_utils import DATASETS, SEEDBENCH_CATS, OODCV_CATS, LLM_DATASETS
 
 BASELINE_PARAMS = {
     'alpha': 0.9,
@@ -71,13 +71,16 @@ def main(args):
     baseline_results = {}
     model_names = os.listdir(args.result_data_path)
 
+    datasets_to_use = LLM_DATASETS if args.mode == 'llm' else DATASETS
+    print(f"Running in {'LLM' if args.mode == 'llm' else 'VLM'} mode")
+
     for model_name in tqdm(model_names, desc="Processing models"):
         optimized_model_results = {}
         baseline_model_results = {}
         policy_base_path = Path(args.policy_path) / model_name
         
-        if args.mode == "all":
-            for dataset_name in DATASETS:
+        if args.mode in ["all", "llm"]: 
+            for dataset_name in datasets_to_use:
                 policy_file = f"{model_name}_{dataset_name}_policy.pth"
                 policy_path = policy_base_path / policy_file
                 
@@ -178,7 +181,7 @@ if __name__ == "__main__":
                         help="Base path to trained policies directory")
     parser.add_argument("--output_file", type=str, required=True,
                         help="Path to save evaluation results")
-    parser.add_argument("--mode", choices=["all", "seedbench", "oodcv"],
+    parser.add_argument("--mode", choices=["all", "seedbench", "oodcv", "llm"],
                         default="all", help="Evaluation mode")
     parser.add_argument("--cal_ratio", type=float, default=0.5,
                         help="Ratio of calibration data")

@@ -267,6 +267,7 @@ def compute_set_metrics(pred_outputs: Dict, test_id_to_answer: Dict) -> Dict[str
         probs = softmax(logits)  
         
         if prediction == 'abstain':
+            correct_predictions.append(1)
             cover.append(1)
             continue
         elif isinstance(prediction, list):

@@ -10,7 +10,7 @@ import pickle
 
 from src.models.policy_network import PolicyNetwork
 from src.models.conformal import Abstention_CP
-from data_utils import DATASETS
+from data_utils import DATASETS, LLM_DATASETS
 
 def load_config(config_path):
     with open(config_path, 'r') as f:
@@ -32,6 +32,10 @@ def train_rl_policy(args, config):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
+    # Determine which dataset list to use based on mode
+    datasets_to_use = LLM_DATASETS if args.mode == 'llm' else DATASETS
+    print(f"Running in {'LLM' if args.mode == 'llm' else 'VLM'} mode")
+
     policy_net = PolicyNetwork().to(device)
     optimizer = optim.Adam(policy_net.parameters(), lr=config['learning_rate'])
     models = os.listdir(args.result_data_path)
@@ -45,7 +49,7 @@ def train_rl_policy(args, config):
 
         hyperparams = torch.tensor([config['alpha'], config['beta']], device=device)
 
-        for dataset_name in DATASETS:
+        for dataset_name in datasets_to_use:
             print(f"Dataset: {dataset_name}")
             file_name = os.path.join(model_path, f"{dataset_name}.pkl")
             if not os.path.exists(file_name):
@@ -113,7 +117,7 @@ def train_rl_policy(args, config):
                 hyperparams = torch.tensor([alpha.item(), beta.item()], device=device)
 
                 if epoch % 10 == 0:
-                    print(f"Epoch {epoch}, Cost: {cost}, Hyperparameters: alpha={alpha.item()}, beta={beta.item()}, cum_prob_threshold={cum_prob_threshold.item()}")
+                    print(f"Epoch {epoch}, Cost: {cost}, Hyperparameters: alpha={alpha.item()}, beta={beta.item()}")
 
             save_path = model_save_path / f"{model_name}_{dataset_name}_policy.pth"
             torch.save({
@@ -139,10 +143,11 @@ def main():
                         help="Path to save trained policies")
     parser.add_argument("--config_file", type=str, required=True,
                         help="Path to configuration file")
+    parser.add_argument("--mode", type=str, choices=['vlm', 'llm'], default='vlm',
+                        help="Training mode: 'vlm' (default) or 'llm'")
     args = parser.parse_args()
 
     config = load_config(args.config_file)
-
     os.makedirs(args.save_model_path, exist_ok=True)
 
     train_rl_policy(args, config)
