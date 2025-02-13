@@ -21,7 +21,8 @@
 
 
 ## News 
-* ```2025.2.06``` 🚀 We release the paper [arXiv](https://arxiv.org/).
+* ```2025.2.08``` 🚀 Released the paper [arXiv](https://arxiv.org/abs/2502.06884).
+* ```2025.2.04``` 🚀 Released the codebase.
 
 ## 🐳 Model Zoo
 
